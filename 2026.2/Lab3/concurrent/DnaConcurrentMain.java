@@ -1,9 +1,15 @@
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
 import java.io.BufferedReader;
 import java.io.FileReader;
 
 public class DnaConcurrentMain {
+
+    static int contador = 0;
+    static Semaphore mutex = new Semaphore(1);
+    static ArrayList<Thread> threads = new ArrayList<>();
 
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -27,15 +33,24 @@ public class DnaConcurrentMain {
             System.exit(3);
         }
 
-        try {
-            long total = 0;
-            
-	    for (File f : files) {
-                total += countInFile(f, pattern);
+        try {            
+            for (File f : files) {
+                Work work = new Work(f, pattern);
+                Thread t = new Thread(work);
+                t.start();
+                threads.add(t);
             }
 
-	    System.out.println("Sequência " + pattern + " foi encontrada " + total + " vezes.");
-        } catch (IOException e) {
+            for(Thread t : threads){
+                try{
+                    t.join();
+                } catch(Exception e){
+                    System.out.println("Deu errado");
+                }
+            }
+
+	        System.out.println("Sequência " + pattern + " foi encontrada " + contador + " vezes.");
+        } catch (Exception e) {
             System.err.println("Erro ao ler arquivos: " + e.getMessage());
             System.exit(4);
         }
@@ -82,4 +97,32 @@ public class DnaConcurrentMain {
         return count;
     }
 
+}
+
+
+class Work implements Runnable{
+    public File file;
+    public String pattern;
+
+    public Work(File file, String pattern){
+        this.file = file;
+        this.pattern = pattern;
+    }
+
+    @Override
+    public void run(){
+        try{
+            long n;
+            n = DnaConcurrentMain.countInFile(file, pattern);
+
+            DnaConcurrentMain.mutex.acquire();
+            try{
+                DnaConcurrentMain.contador += n;
+            } finally{
+                DnaConcurrentMain.mutex.release();
+            }
+        } catch (Exception e){
+            System.out.println("Deu errado!");
+        }
+    }
 }
